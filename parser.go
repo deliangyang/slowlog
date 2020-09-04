@@ -7,6 +7,14 @@ import (
 	"time"
 )
 
+const (
+	Flag1 = "1) (integer) "
+	Flag2 = "2) (integer) "
+	Flag3 = "3) (integer) "
+	Flag4 = "4) 1) \""
+	Flag5 = ") \""
+)
+
 // SlowLog Redis日志结构
 type SlowLog struct {
 	ID          int64     `json:"id"`
@@ -14,15 +22,6 @@ type SlowLog struct {
 	ExecuteTime int64     `json:"executeTime"`
 	Operator    string    `json:"operator"`
 	Parameters  []string  `json:"parameters"`
-}
-
-func flagIndex(line string, substr string) string {
-	index := strings.Index(line, substr)
-	if index < 0 {
-		return ""
-	}
-	index += len(substr)
-	return line[int64(index):]
 }
 
 // Parse 解析日志
@@ -34,9 +33,7 @@ func Parse(log string) ([]SlowLog, error) {
 	for _, line := range lines {
 		line := strings.TrimSpace(line)
 
-		item := flagIndex(line, "1) (integer) ")
-
-		if item != "" {
+		if item := flagIndex(line, Flag1); item != "" {
 			id, err := strconv.ParseInt(item, 10, 64)
 			if err != nil {
 				return slowLogs, err
@@ -53,33 +50,27 @@ func Parse(log string) ([]SlowLog, error) {
 			return slowLogs, errors.New("slow logs not init")
 		}
 
-		item = flagIndex(line, "2) (integer) ")
-		if item != "" {
+		if item := flagIndex(line, Flag4); item != "" {
+			slowLog.Operator = trim(item)
+		} else {
+			if item := flagIndex(line, Flag5); item != "" {
+				slowLog.Parameters = append(slowLog.Parameters, trim(item))
+			}
+		}
+
+		if item := flagIndex(line, Flag2); item != "" {
 			cTime, err := strconv.ParseInt(item, 10, 64)
 			if err == nil {
 				slowLog.CreateTime = time.Unix(cTime, 0)
 			}
 		}
 
-		item = flagIndex(line, "3) (integer) ")
-		if item != "" {
+		if item := flagIndex(line, Flag3); item != "" {
 			executeTime, err := strconv.ParseInt(item, 10, 64)
 			if err != nil {
 				return slowLogs, nil
 			}
 			slowLog.ExecuteTime = executeTime
-		}
-
-		item = flagIndex(line, "4) 1) \"")
-		if item != "" {
-			slowLog.Operator = strings.Trim(item, "\"")
-		} else {
-			item = flagIndex(line, ") \"")
-			if item != "" {
-				slowLog.Parameters = append(
-					slowLog.Parameters,
-					strings.Trim(item, "\""))
-			}
 		}
 	}
 
@@ -87,4 +78,17 @@ func Parse(log string) ([]SlowLog, error) {
 		slowLogs = append(slowLogs, *slowLog)
 	}
 	return slowLogs, nil
+}
+
+func trim(line string) string {
+	return strings.Trim(line, "\"")
+}
+
+func flagIndex(line string, substr string) string {
+	index := strings.Index(line, substr)
+	if index < 0 {
+		return ""
+	}
+	index += len(substr)
+	return line[int64(index):]
 }
